@@ -54,12 +54,12 @@ class Transcript {
     for (final line in lines) {
       lineNum++;
 
-      if (line.isEmpty || int.tryParse(line.trim()) != null) {
+      if (line.trim().isEmpty || int.tryParse(line.trim()) != null) {
         continue;
       }
 
       if (line.contains("-->")) {
-        final times = line.split(":");
+        final times = line.split("-->");
         startTime = timeStringToSeconds(times[0].trim());
         endTime = timeStringToSeconds(times[1].trim());
         continue;
@@ -135,13 +135,14 @@ class SubtitleLine {
 }
 
 double timeStringToSeconds(String timeString) {
-  final split = timeString.split("");
+  final split = timeString.split(",");
   final left = split[0];
   final right = split[1];
 
   final millis = double.parse(right);
 
   final hoursMinSec = left.split(":").map((s) => double.parse(s)).toList();
+
 
   return hoursMinSec[2] +
       (hoursMinSec[1] * 60) +

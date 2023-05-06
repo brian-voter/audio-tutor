@@ -1,3 +1,4 @@
+import 'package:audio_tutor/transcript.dart';
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +6,6 @@ import 'package:audio_tutor/dictionary.dart';
 import 'package:flutter/services.dart';
 
 void main() {
-
   runApp(const MyApp());
 }
 
@@ -34,38 +34,80 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  bool playing = false;
-
-  final player = AudioPlayer();
+  final _player = AudioPlayer();
+  bool _started = false;
+  bool _playing = false;
+  int _queryingAtWordIndex = 0;
+  Dictionary? dict;
+  Transcript? srt;
+  String currentlyDisplayedDefText = "";
 
   _MyHomePageState() {
-    player.setSource(AssetSource("laogao_audio.mp3"));
-    testDict();
+    _player.setSource(AssetSource("laogao_audio.mp3"));
+    init();
   }
 
-  void testDict() async {
+  void init() async {
     print("TEST DICT!");
     final dictStr = await rootBundle.loadString("assets/cedict_ts.txt");
-    final dict = Dictionary(dictStr);
+    dict = Dictionary(dictStr);
 
     print("TEST!!!");
-    print(dict.lookup("臺灣")!.getFullEntryString());
+    print("parse: ${dict!.parse(
+        "描寫主角哈利波特在霍格華茲魔法學校7年學習生活中的冒險故事").join(
+        " ")}");
+    print(dict!.lookup("臺灣")!.getFullEntryString());
+
+    final srtStr = await rootBundle.loadString("assets/laogao.srt");
+    srt = Transcript(srtStr, dict!);
+  }
+
+  void _pause() {
+    setState(() {
+      _playing = false;
+    });
+    _player.pause();
+  }
+
+  Future<void> _consultDict() async {
+    if (!_started) {
+      return;
+    }
+
+    _pause();
+
+    final positionSeconds = (await _player.getCurrentPosition())!
+        .inSeconds;
+    final queryingWord = srt!.getWordAtTime(positionSeconds.toDouble());
+    _queryingAtWordIndex = queryingWord.wordIndex;
+
+    setState(() {
+      currentlyDisplayedDefText =
+          dict!.lookup(queryingWord.text)?.getFullEntryString() ??
+              "${queryingWord.text}: No def found.";
+    });
+  }
+
+  void _queryMoveBack() {
+    _pause();
+  }
+
+  void _queryMoveFoward() {
+    _pause();
   }
 
   void _playPauseButtonPress() {
-    playing = !playing;
-
-    if (playing) {
-      player.resume();
-    } else {
-      player.pause();
-    }
+    _started = true;
 
     setState(() {
-      _counter++;
+      _playing = !_playing;
     });
+
+    if (_playing) {
+      _player.resume();
+    } else {
+      _player.pause();
+    }
   }
 
   @override
@@ -79,17 +121,19 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
-              style: Theme.of(context).textTheme.displaySmall,
-              textAlign: TextAlign.center,
+            Text(currentlyDisplayedDefText, textAlign: TextAlign.center),
+            Row(mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(onPressed: _queryMoveBack,
+                    child: const Icon(Icons.arrow_back)),
+                ElevatedButton(
+                    onPressed: _consultDict, child: const Icon(Icons.search)),
+                ElevatedButton(onPressed: _queryMoveFoward,
+                    child: const Icon(Icons.arrow_forward)),
+              ],
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.displayMedium,
-            ),
-            ElevatedButton(onPressed: _playPauseButtonPress, 
-                child: Icon(playing ? Icons.pause : Icons.play_arrow)),
+            ElevatedButton(onPressed: _playPauseButtonPress,
+                child: Icon(_playing ? Icons.pause : Icons.play_arrow)),
             //     child: Text(
             //   playing ? "Pause" : "Play"
             // )),
