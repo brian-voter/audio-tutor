@@ -9,10 +9,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:audio_tutor/dictionary.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_spinbox/flutter_spinbox.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:volume_watcher/volume_watcher.dart';
 
 const seekTimeMs = 5000;
+
+//TODO: SWAP TO https://pub.dev/packages/just_audio#platform-specific-configuration
 
 void main() {
   runApp(const MyApp());
@@ -60,6 +63,7 @@ class _MyHomePageState extends State<MyHomePage> {
   int _lastVolumeAdjustmentMillis = 0;
   bool _audio_ready = false;
   bool _srt_ready = false;
+  double _queryPositionOffsetMs = -700.0;
 
   // FlutterTts englishTts = FlutterTts();
 
@@ -124,10 +128,13 @@ class _MyHomePageState extends State<MyHomePage> {
                 _lastVolumeAdjustmentMillis >
             100) {
           if (newVolume > _volumeSetting) {
+            print("FORWARD!");
             _queryMoveFoward();
           } else if (newVolume < _volumeSetting) {
+            print("BACK!");
             _queryMoveBack();
           } else {
+            print("HERE!");
             _consultDict();
           }
         }
@@ -201,7 +208,8 @@ class _MyHomePageState extends State<MyHomePage> {
     final positionSeconds =
         (await _player.getCurrentPosition())!.inSeconds.toDouble();
 
-    final queryingWord = _srt.getWordAtTime(positionSeconds - 1);
+    //TODO: catch in case of out of bounds
+    final queryingWord = _srt.getWordAtTime(positionSeconds + (_queryPositionOffsetMs / 1000));
     _queryingAtWordIndex = queryingWord.wordIndex;
 
     _renderQuery(queryingWord);
@@ -330,13 +338,43 @@ class _MyHomePageState extends State<MyHomePage> {
                   ],
                 ),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Switch(
-                        value: _isCaptureVolumeButtons,
-                        onChanged: _onCaptureVolumeButtonsChanged),
-                    const Text("Capture vol. buttons"),
+                    Row(
+                      children: [
+                        Switch(
+                            value: _isCaptureVolumeButtons,
+                            onChanged: _onCaptureVolumeButtonsChanged),
+                        const Text("Capture vol. buttons"),
+                      ],
+                    ),
                   ],
                 ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Text("Offset (ms):"),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(5, 0, 0, 0),
+                        child: Container(
+                          constraints: const BoxConstraints.expand(width: 200, height: 40),
+                          child: SpinBox(
+                            min: -60000,
+                            max: 60000,
+                            value: _queryPositionOffsetMs,
+                            step: 100,
+                            onChanged: (value) => { setState(() {
+                              _queryPositionOffsetMs = value;
+                            })},
+                          ),
+                        ),
+                      )
+                    ],
+                  ),
+                )
               ],
             ),
             Expanded(
@@ -354,11 +392,11 @@ class _MyHomePageState extends State<MyHomePage> {
                       child: SingleChildScrollView(
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              _currentlyDisplayedDefText,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 20),
-                            ),
+                          child: Text(
+                            _currentlyDisplayedDefText,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 20),
+                          ),
                         ),
                       ),
                     ),
