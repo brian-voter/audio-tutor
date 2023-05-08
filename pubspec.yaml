@@ -38,10 +38,10 @@ dependencies:
   audio_video_progress_bar: ^1.0.1
   audioplayers: ^4.0.1
   flutter_tts: ^3.6.3
-  volume_watcher: ^2.0.1
   file_picker: ^5.2.11
   audioplayers_web: ^3.0.1
   flutter_spinbox: ^0.13.0
+  just_audio: ^0.9.32
 
 dev_dependencies:
   flutter_test:

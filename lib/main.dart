@@ -1,19 +1,25 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:audio_tutor/BufferAudioSource.dart';
 import 'package:audio_tutor/text_to_speech.dart';
 import 'package:audio_tutor/transcript.dart';
-import 'package:audio_tutor/utils.dart';
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:audio_tutor/dictionary.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:volume_watcher/volume_watcher.dart';
+import 'package:just_audio/just_audio.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 const seekTimeMs = 5000;
+const chineseLangTtsTagAndroid = "cmn_TW";
+const chineseLangTtsTagWeb = "zh-TW";
+const englishTtsTag = "en-US";
+
 
 //TODO: SWAP TO https://pub.dev/packages/just_audio#platform-specific-configuration
 
@@ -57,15 +63,15 @@ class _MyHomePageState extends State<MyHomePage> {
   late final TTSImpl _ttsImpl;
   Duration? _audioPosition;
   Duration? _totalDuration;
-  late final VolumeWatcher _volumeWatcher;
   bool _isCaptureVolumeButtons = true;
-  double _volumeSetting = 0;
-  int _lastVolumeAdjustmentMillis = 0;
-  bool _audio_ready = false;
-  bool _srt_ready = false;
-  double _queryPositionOffsetMs = -700.0;
 
-  // FlutterTts englishTts = FlutterTts();
+  // late final VolumeWatcher _volumeWatcher;
+  // double _volumeSetting = 0;
+  // int _lastVolumeAdjustmentMillis = 0;
+  bool _audioReady = false;
+  bool _srtReady = false;
+  double _queryPositionOffsetMs = -700.0;
+  late final MethodChannel platformMethodChannel;
 
   _MyHomePageState() {
     init();
@@ -86,69 +92,100 @@ class _MyHomePageState extends State<MyHomePage> {
 
     _ttsImpl = TTSImpl(_onTTSSpeechComplete);
 
-    _initVolumeWatcher();
+    platformMethodChannel =
+        const MethodChannel('com.chrono7.audiotutor/volumeservice');
+    platformMethodChannel.setMethodCallHandler(_methodCallHandler);
+
+    updateVolumeCaptureStatus();
+    // _initVolumeWatcher();
   }
 
-  bool _keyHandler(KeyEvent event) {
-    print(event.toString());
-    return true;
+  void updateVolumeCaptureStatus() {
+    if (!kIsWeb && Platform.isAndroid) {
+      if (_isCaptureVolumeButtons) {
+        platformMethodChannel.invokeMethod("enableVolumeCapture");
+      } else {
+        platformMethodChannel.invokeMethod("disableVolumeCapture");
+      }
+    }
+  }
+
+  Future<void> _methodCallHandler(MethodCall call) async {
+    switch (call.method) {
+      case "onVolumeButtonPress":
+        if (call.arguments == 1) {
+          _queryMoveFoward();
+        } else if (call.arguments == -1) {
+          _queryMoveBack();
+        } else {
+          _consultDict();
+        }
+        break;
+      default:
+        print("ERROR: no method handler for ${call.method}");
+    }
   }
 
   void _onTTSSpeechComplete() {
     _playing = true;
-    _player.resume();
+    _player.play();
   }
 
   Future<void> _initPlayer() async {
     https: //www.youtube.com/watch?v=jRh7Pyq1z1A&list=PLfS0WrMWEu_73gUisyRvzIFyJ6I5RFszh
     // await _player.setSource(AssetSource("laogao_audio.mp3"));
     // await _player.setSourceDeviceFile("/sdcard/Documents/Socrates.mp3");
-    _player.onPositionChanged.listen(_onPlayerPositionChanged);
-    _player.onDurationChanged.listen(_onPlayerDurationChanged);
-    final duration = await _player.getDuration();
+    _player.positionStream.listen(_onPlayerPositionChanged);
+    _player.durationStream.listen(_onPlayerDurationChanged);
+    // _player.onPositionChanged.listen(_onPlayerPositionChanged);
+    // _player.onDurationChanged.listen(_onPlayerDurationChanged);
+    final duration = _player.duration;
     setState(() {
       _totalDuration = duration;
-      _audio_ready = true;
+      _audioReady = true;
     });
   }
 
-  void _initVolumeWatcher() async {
-    _volumeSetting = await VolumeWatcher.getCurrentVolume;
-    // VolumeWatcher.hideVolumeView = true;
-    VolumeWatcher.addListener((newVolume) {
-      if (_isCaptureVolumeButtons) {
-        print("vs: $_volumeSetting nv: $newVolume");
-        VolumeWatcher.setVolume(_volumeSetting);
-
-        if (!_started) {
-          return;
-        }
-
-        if (DateTime.now().millisecondsSinceEpoch -
-                _lastVolumeAdjustmentMillis >
-            100) {
-          if (newVolume > _volumeSetting) {
-            print("FORWARD!");
-            _queryMoveFoward();
-          } else if (newVolume < _volumeSetting) {
-            print("BACK!");
-            _queryMoveBack();
-          } else {
-            print("HERE!");
-            _consultDict();
-          }
-        }
-
-        _lastVolumeAdjustmentMillis = DateTime.now().millisecondsSinceEpoch;
-      } else {
-        _volumeSetting = newVolume;
-      }
-    });
-  }
+  // void _initVolumeWatcher() async {
+  //   _volumeSetting = await VolumeWatcher.getCurrentVolume;
+  //   // VolumeWatcher.hideVolumeView = true;
+  //   VolumeWatcher.addListener((newVolume) {
+  //     if (_isCaptureVolumeButtons) {
+  //       print("vs: $_volumeSetting nv: $newVolume");
+  //
+  //       if (!_started) {
+  //         return;
+  //       }
+  //
+  //       VolumeWatcher.setVolume(_volumeSetting);
+  //       // _player.setVolume(_volumeSetting);
+  //
+  //       if (DateTime.now().millisecondsSinceEpoch -
+  //               _lastVolumeAdjustmentMillis >
+  //           100) {
+  //         if (newVolume > _volumeSetting) {
+  //           print("FORWARD!");
+  //           _queryMoveFoward();
+  //         } else if (newVolume < _volumeSetting) {
+  //           print("BACK!");
+  //           _queryMoveBack();
+  //         } else {
+  //           print("HERE!");
+  //           _consultDict();
+  //         }
+  //       }
+  //
+  //       _lastVolumeAdjustmentMillis = DateTime.now().millisecondsSinceEpoch;
+  //     } else {
+  //       _volumeSetting = newVolume;
+  //     }
+  //   });
+  // }
 
   void _onCaptureVolumeButtonsChanged(bool captureEnabled) {
     setState(() {
       _isCaptureVolumeButtons = captureEnabled;
+      updateVolumeCaptureStatus();
     });
   }
 
@@ -158,7 +195,7 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void _onPlayerDurationChanged(Duration duration) {
+  void _onPlayerDurationChanged(Duration? duration) {
     setState(() {
       _totalDuration = duration;
     });
@@ -172,8 +209,12 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _readDefinitionTTS(DictionaryEntry entry) {
+    if (!kIsWeb && Platform.isAndroid) {
+      platformMethodChannel.invokeMethod("setWakeLock");
+    }
+
     final toSay = [
-      TtsItem(entry.tradHanzi, "zh-TW"),
+      TtsItem(entry.tradHanzi, (kIsWeb ? chineseLangTtsTagWeb : chineseLangTtsTagAndroid)),
       TtsItem(entry.definition.replaceAll("/", ";"), "en-US")
     ];
 
@@ -205,11 +246,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
     _pause();
 
-    final positionSeconds =
-        (await _player.getCurrentPosition())!.inSeconds.toDouble();
+    final positionSeconds = _player.position.inSeconds.toDouble();
 
     //TODO: catch in case of out of bounds
-    final queryingWord = _srt.getWordAtTime(positionSeconds + (_queryPositionOffsetMs / 1000));
+    final queryingWord =
+        _srt.getWordAtTime(positionSeconds + (_queryPositionOffsetMs / 1000));
     _queryingAtWordIndex = queryingWord.wordIndex;
 
     _renderQuery(queryingWord);
@@ -254,7 +295,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (_playing) {
       _stopTts();
-      _player.resume();
+      _player.play();
     } else {
       _player.pause();
     }
@@ -265,7 +306,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _onBackButtonPress() async {
-    final curPos = await _player.getCurrentPosition();
+    final curPos = _player.position;
 
     if (curPos == null) {
       return;
@@ -275,7 +316,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _onForwardButtonPress() async {
-    final curPos = await _player.getCurrentPosition();
+    final curPos = _player.position;
 
     if (curPos == null) {
       return;
@@ -289,9 +330,18 @@ class _MyHomePageState extends State<MyHomePage> {
         .pickFiles(type: FileType.custom, allowedExtensions: ["mp3"]);
 
     if (result != null) {
-      await _player.setSourceDeviceFile(result.files.single.path!);
+      if (kIsWeb) {
+        await _player
+            .setAudioSource(BufferAudioSource(result.files.single.bytes!));
+      } else {
+        await _player.setFilePath(result.files.single.path!);
+      }
+      // _player.setAudio
+      // _player.setAudioSource(AudioSource)
+      // await _player.setSourceDeviceFile(result.files.single.path!);
       // await _player.setSourceBytes(result.files.single.bytes!);
       _initPlayer();
+      // _initVolumeWatcher();
     }
   }
 
@@ -300,9 +350,15 @@ class _MyHomePageState extends State<MyHomePage> {
         .pickFiles(type: FileType.custom, allowedExtensions: ["srt"]);
 
     if (result != null) {
-      File file = File(result.files.single.path!);
-      _srt = Transcript(file.readAsStringSync(), _dict);
-      _srt_ready = true;
+      if (kIsWeb) {
+        final str =
+            const Utf8Decoder().convert(result.files.single.bytes!.toList());
+        _srt = Transcript(str, _dict);
+      } else {
+        File file = File(result.files.single.path!);
+        _srt = Transcript(file.readAsStringSync(), _dict);
+      }
+      _srtReady = true;
     }
   }
 
@@ -337,19 +393,22 @@ class _MyHomePageState extends State<MyHomePage> {
                     const Text("Select SRT File"),
                   ],
                 ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Switch(
-                            value: _isCaptureVolumeButtons,
-                            onChanged: _onCaptureVolumeButtonsChanged),
-                        const Text("Capture vol. buttons"),
-                      ],
-                    ),
-                  ],
-                ),
+                ((!kIsWeb && Platform.isAndroid)
+                    ? Row(
+                        //TODO: refactor this mess
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Switch(
+                                  value: _isCaptureVolumeButtons,
+                                  onChanged: _onCaptureVolumeButtonsChanged),
+                              const Text("Capture vol. buttons"),
+                            ],
+                          ),
+                        ],
+                      )
+                    : Row()),
                 Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: Row(
@@ -360,15 +419,18 @@ class _MyHomePageState extends State<MyHomePage> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(5, 0, 0, 0),
                         child: Container(
-                          constraints: const BoxConstraints.expand(width: 200, height: 40),
+                          constraints: const BoxConstraints.expand(
+                              width: 200, height: 40),
                           child: SpinBox(
                             min: -60000,
                             max: 60000,
                             value: _queryPositionOffsetMs,
                             step: 100,
-                            onChanged: (value) => { setState(() {
-                              _queryPositionOffsetMs = value;
-                            })},
+                            onChanged: (value) => {
+                              setState(() {
+                                _queryPositionOffsetMs = value;
+                              })
+                            },
                           ),
                         ),
                       )
@@ -410,18 +472,18 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   ElevatedButton(
                       onPressed:
-                          (_started && _srt_ready) ? _queryMoveBack : null,
+                          (_started && _srtReady) ? _queryMoveBack : null,
                       child: const Icon(Icons.arrow_back)),
                   Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: ElevatedButton(
                         onPressed:
-                            (_started && _srt_ready) ? _consultDict : null,
+                            (_started && _srtReady) ? _consultDict : null,
                         child: const Icon(Icons.search)),
                   ),
                   ElevatedButton(
                       onPressed:
-                          (_started && _srt_ready) ? _queryMoveFoward : null,
+                          (_started && _srtReady) ? _queryMoveFoward : null,
                       child: const Icon(Icons.arrow_forward)),
                 ],
               ),
@@ -443,7 +505,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: ElevatedButton(
-                        onPressed: _audio_ready ? _playPauseButtonPress : null,
+                        onPressed: _audioReady ? _playPauseButtonPress : null,
                         child: Icon(_playing ? Icons.pause : Icons.play_arrow)),
                   ),
                   ElevatedButton(
