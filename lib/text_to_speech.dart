@@ -22,7 +22,6 @@ class TTSImpl {
     _flutterTts.setCompletionHandler(_onSpeechComplete);
   }
 
-
   getVoices() async {
     final voices = await _flutterTts.getVoices;
     print("voices: $voices");
@@ -67,6 +66,10 @@ class TTSImpl {
       //   _flutterTts.setVoice(voiceMap);
       // }
       _flutterTts.setLanguage(nextItem.language);
+      if (nextItem.voice != null && nextItem.voice!.isEmpty) {
+        _flutterTts
+            .setVoice({"locale": nextItem.language, "name": nextItem.voice!});
+      }
       _flutterTts.speak(nextItem.text);
     }
   }
@@ -75,6 +78,7 @@ class TTSImpl {
 class TtsItem {
   final String text;
   final String language;
+  final String? voice;
 
-  TtsItem(this.text, this.language);
+  TtsItem(this.text, this.language, this.voice);
 }

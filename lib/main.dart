@@ -26,8 +26,6 @@ const chineseLangTtsTagAndroid = "cmn_TW";
 const chineseLangTtsTagWeb = "zh-TW";
 const englishTtsTag = "en-US";
 
-//TODO: SWAP TO https://pub.dev/packages/just_audio#platform-specific-configuration
-
 void main() {
   runApp(const MyApp());
 }
@@ -82,11 +80,13 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void init() async {
-    await initDB();
+    await initConfig();
 
     final dictStr = await rootBundle.loadString("assets/cedict_ts.txt");
     _dict = Dictionary(dictStr);
 
+
+    //TODO: fix frequency list to work with traditional chars as well
     final freqStr = await rootBundle.loadString("assets/freq_list.txt");
     _freqList = FrequencyList(freqStr);
 
@@ -99,34 +99,16 @@ class _MyHomePageState extends State<MyHomePage> {
     updateVolumeCaptureStatus();
   }
 
-  Future<void> initDB() async {
-    final dir = await getApplicationDocumentsDirectory();
-    isar = await Isar.open(
-      [ConfigSchema],
-      directory: dir.path,
-    );
+  Future<void> initConfig() async {
 
-    var configTemp =
-        isar.configs.filter().isActiveConfigEqualTo(true).findFirstSync();
+    //TODO: FIX THIS
 
-    if (configTemp == null) {
-      configTemp = Config()
-        ..configName = "Default"
-        ..ignoreWordsBelowFrequency = 0
-        ..isActiveConfig = true
-        ..ttsChineseLocale = "zh-TW"
-        ..ttsChineseVoice = "" //TODO: fix
-        ..ttsEnglishLocale = "en-US"
-        ..ttsEnglishVoice = ""; //TODO: fix
-
-      await isar.writeTxn(() async {
-        await isar.configs.put(configTemp!);
-      });
+    if (!Config.doesConfigExist("default")) {
+      config = Config.newConfig("default");
+    } else {
+      await Config.deleteConfig("default");
+      config = Config.loadConfig("default");
     }
-
-    config = configTemp;
-
-    print("CONFIG: ${config.ignoreWordsBelowFrequency}");
   }
 
   void updateVolumeCaptureStatus() {
@@ -210,8 +192,9 @@ class _MyHomePageState extends State<MyHomePage> {
       TtsItem(
           entry.tradHanzi,
           // (kIsWeb ? chineseLangTtsTagWeb : chineseLangTtsTagAndroid)),
-          config.ttsChineseLocale!),
-      TtsItem(entry.definition.replaceAll("/", ";"), config.ttsEnglishLocale!)
+          config.ttsChineseLocale.val, config.ttsChineseVoice.val),
+      TtsItem(entry.definition.replaceAll("/", ";"),
+          config.ttsEnglishLocale.val, config.ttsEnglishVoice.val)
     ];
 
     _ttsImpl.interruptAndScheduleBatch(toSay);
@@ -251,7 +234,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _queryingAtWordIndex = queryingWord.wordIndex;
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency!) {
+    while (freq < config.ignoreWordsBelowFrequency.val) {
       _queryingAtWordIndex = _queryingAtWordIndex! - 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -275,7 +258,7 @@ class _MyHomePageState extends State<MyHomePage> {
     var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency!) {
+    while (freq < config.ignoreWordsBelowFrequency.val) {
       _queryingAtWordIndex = _queryingAtWordIndex! - 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -298,7 +281,7 @@ class _MyHomePageState extends State<MyHomePage> {
     var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency!) {
+    while (freq < config.ignoreWordsBelowFrequency.val) {
       _queryingAtWordIndex = _queryingAtWordIndex! + 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
