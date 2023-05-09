@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:audio_tutor/BufferAudioSource.dart';
+import 'package:audio_tutor/frequency.dart';
 import 'package:audio_tutor/text_to_speech.dart';
 import 'package:audio_tutor/transcript.dart';
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
@@ -11,15 +12,19 @@ import 'package:audio_tutor/dictionary.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:isar/isar.dart';
 import 'package:just_audio/just_audio.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path_provider/path_provider.dart';
+
+import 'at_audio_player.dart';
+import 'config.dart';
 
 const seekTimeMs = 5000;
 const chineseLangTtsTagAndroid = "cmn_TW";
 const chineseLangTtsTagWeb = "zh-TW";
 const englishTtsTag = "en-US";
-
 
 //TODO: SWAP TO https://pub.dev/packages/just_audio#platform-specific-configuration
 
@@ -52,43 +57,38 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late final _player = AudioPlayer();
+  late final Isar isar;
+  late final ATAudioPlayer _player;
+  late final MethodChannel platformMethodChannel;
+  late final TTSImpl _ttsImpl;
+  late final Dictionary _dict;
+  late final FrequencyList _freqList;
+  late Transcript _srt;
+  late Config config;
   bool _started = false;
   bool _playing = false;
   int? _queryingAtWordIndex;
-  late Dictionary _dict;
-  late Transcript _srt;
   String _currentlyDisplayedDefText = "";
   String _currentlyDisplayedSubLineText = "";
-  late final TTSImpl _ttsImpl;
   Duration? _audioPosition;
   Duration? _totalDuration;
   bool _isCaptureVolumeButtons = true;
-
-  // late final VolumeWatcher _volumeWatcher;
-  // double _volumeSetting = 0;
-  // int _lastVolumeAdjustmentMillis = 0;
   bool _audioReady = false;
   bool _srtReady = false;
   double _queryPositionOffsetMs = -700.0;
-  late final MethodChannel platformMethodChannel;
 
   _MyHomePageState() {
     init();
   }
 
   void init() async {
-    print("TEST DICT!");
+    await initDB();
+
     final dictStr = await rootBundle.loadString("assets/cedict_ts.txt");
-    // final dictStr = await File("/sdcard/Documents/Socrates.srt").readAsString();
     _dict = Dictionary(dictStr);
 
-    print("TEST!!!");
-    print("parse: ${_dict.parse("描寫主角哈利波特在霍格華茲魔法學校7年學習生活中的冒險故事").join(" ")}");
-    print(_dict.lookup("臺灣")!.getFullEntryString());
-
-    // final srtStr = await rootBundle.loadString("assets/laogao.srt");
-    // _srt = Transcript(srtStr, _dict);
+    final freqStr = await rootBundle.loadString("assets/freq_list.txt");
+    _freqList = FrequencyList(freqStr);
 
     _ttsImpl = TTSImpl(_onTTSSpeechComplete);
 
@@ -97,7 +97,36 @@ class _MyHomePageState extends State<MyHomePage> {
     platformMethodChannel.setMethodCallHandler(_methodCallHandler);
 
     updateVolumeCaptureStatus();
-    // _initVolumeWatcher();
+  }
+
+  Future<void> initDB() async {
+    final dir = await getApplicationDocumentsDirectory();
+    isar = await Isar.open(
+      [ConfigSchema],
+      directory: dir.path,
+    );
+
+    var configTemp =
+        isar.configs.filter().isActiveConfigEqualTo(true).findFirstSync();
+
+    if (configTemp == null) {
+      configTemp = Config()
+        ..configName = "Default"
+        ..ignoreWordsBelowFrequency = 0
+        ..isActiveConfig = true
+        ..ttsChineseLocale = "zh-TW"
+        ..ttsChineseVoice = "" //TODO: fix
+        ..ttsEnglishLocale = "en-US"
+        ..ttsEnglishVoice = ""; //TODO: fix
+
+      await isar.writeTxn(() async {
+        await isar.configs.put(configTemp!);
+      });
+    }
+
+    config = configTemp;
+
+    print("CONFIG: ${config.ignoreWordsBelowFrequency}");
   }
 
   void updateVolumeCaptureStatus() {
@@ -132,55 +161,19 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _initPlayer() async {
-    https: //www.youtube.com/watch?v=jRh7Pyq1z1A&list=PLfS0WrMWEu_73gUisyRvzIFyJ6I5RFszh
+    // https: //www.youtube.com/watch?v=jRh7Pyq1z1A&list=PLfS0WrMWEu_73gUisyRvzIFyJ6I5RFszh
     // await _player.setSource(AssetSource("laogao_audio.mp3"));
     // await _player.setSourceDeviceFile("/sdcard/Documents/Socrates.mp3");
-    _player.positionStream.listen(_onPlayerPositionChanged);
-    _player.durationStream.listen(_onPlayerDurationChanged);
+    _player.getPositionStream().listen(_onPlayerPositionChanged);
+    _player.getDurationStream().listen(_onPlayerDurationChanged);
     // _player.onPositionChanged.listen(_onPlayerPositionChanged);
     // _player.onDurationChanged.listen(_onPlayerDurationChanged);
-    final duration = _player.duration;
+    final duration = (await _player.getDuration()) ?? const Duration();
     setState(() {
       _totalDuration = duration;
       _audioReady = true;
     });
   }
-
-  // void _initVolumeWatcher() async {
-  //   _volumeSetting = await VolumeWatcher.getCurrentVolume;
-  //   // VolumeWatcher.hideVolumeView = true;
-  //   VolumeWatcher.addListener((newVolume) {
-  //     if (_isCaptureVolumeButtons) {
-  //       print("vs: $_volumeSetting nv: $newVolume");
-  //
-  //       if (!_started) {
-  //         return;
-  //       }
-  //
-  //       VolumeWatcher.setVolume(_volumeSetting);
-  //       // _player.setVolume(_volumeSetting);
-  //
-  //       if (DateTime.now().millisecondsSinceEpoch -
-  //               _lastVolumeAdjustmentMillis >
-  //           100) {
-  //         if (newVolume > _volumeSetting) {
-  //           print("FORWARD!");
-  //           _queryMoveFoward();
-  //         } else if (newVolume < _volumeSetting) {
-  //           print("BACK!");
-  //           _queryMoveBack();
-  //         } else {
-  //           print("HERE!");
-  //           _consultDict();
-  //         }
-  //       }
-  //
-  //       _lastVolumeAdjustmentMillis = DateTime.now().millisecondsSinceEpoch;
-  //     } else {
-  //       _volumeSetting = newVolume;
-  //     }
-  //   });
-  // }
 
   void _onCaptureVolumeButtonsChanged(bool captureEnabled) {
     setState(() {
@@ -189,7 +182,7 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void _onPlayerPositionChanged(Duration position) {
+  void _onPlayerPositionChanged(Duration? position) {
     setState(() {
       _audioPosition = position;
     });
@@ -214,8 +207,11 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     final toSay = [
-      TtsItem(entry.tradHanzi, (kIsWeb ? chineseLangTtsTagWeb : chineseLangTtsTagAndroid)),
-      TtsItem(entry.definition.replaceAll("/", ";"), "en-US")
+      TtsItem(
+          entry.tradHanzi,
+          // (kIsWeb ? chineseLangTtsTagWeb : chineseLangTtsTagAndroid)),
+          config.ttsChineseLocale!),
+      TtsItem(entry.definition.replaceAll("/", ";"), config.ttsEnglishLocale!)
     ];
 
     _ttsImpl.interruptAndScheduleBatch(toSay);
@@ -246,12 +242,20 @@ class _MyHomePageState extends State<MyHomePage> {
 
     _pause();
 
-    final positionSeconds = _player.position.inSeconds.toDouble();
+    final positionSeconds =
+        (await _player.getPosition() ?? const Duration()).inSeconds.toDouble();
 
     //TODO: catch in case of out of bounds
-    final queryingWord =
+    var queryingWord =
         _srt.getWordAtTime(positionSeconds + (_queryPositionOffsetMs / 1000));
     _queryingAtWordIndex = queryingWord.wordIndex;
+    var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
+
+    while (freq < config.ignoreWordsBelowFrequency!) {
+      _queryingAtWordIndex = _queryingAtWordIndex! - 1;
+      queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
+      freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
+    }
 
     _renderQuery(queryingWord);
   }
@@ -265,8 +269,18 @@ class _MyHomePageState extends State<MyHomePage> {
     if (_queryingAtWordIndex == null || _queryingAtWordIndex! <= 0) {
       return;
     }
+
+    //TODO: handle out of bounds!
     _queryingAtWordIndex = _queryingAtWordIndex! - 1;
-    _renderQuery(_srt.getWordAtIndex(_queryingAtWordIndex!));
+    var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
+    var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
+
+    while (freq < config.ignoreWordsBelowFrequency!) {
+      _queryingAtWordIndex = _queryingAtWordIndex! - 1;
+      queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
+      freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
+    }
+    _renderQuery(queryingWord);
   }
 
   void _queryMoveFoward() {
@@ -278,8 +292,18 @@ class _MyHomePageState extends State<MyHomePage> {
     if (_queryingAtWordIndex == null || _queryingAtWordIndex! <= 0) {
       return;
     }
+
+    //TODO: handle out of bounds!
     _queryingAtWordIndex = _queryingAtWordIndex! + 1;
-    _renderQuery(_srt.getWordAtIndex(_queryingAtWordIndex!));
+    var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
+    var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
+
+    while (freq < config.ignoreWordsBelowFrequency!) {
+      _queryingAtWordIndex = _queryingAtWordIndex! + 1;
+      queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
+      freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
+    }
+    _renderQuery(queryingWord);
   }
 
   void _stopTts() {
@@ -306,7 +330,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _onBackButtonPress() async {
-    final curPos = _player.position;
+    final curPos = await _player.getPosition();
 
     if (curPos == null) {
       return;
@@ -316,7 +340,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _onForwardButtonPress() async {
-    final curPos = _player.position;
+    final curPos = await _player.getPosition();
 
     if (curPos == null) {
       return;
@@ -331,10 +355,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (result != null) {
       if (kIsWeb) {
-        await _player
-            .setAudioSource(BufferAudioSource(result.files.single.bytes!));
+        //TODO: make async so we don't bog down UI!
+        _player = await JAAudioPlayerImpl.build(
+            BufferAudioSource(result.files.single.bytes!));
       } else {
-        await _player.setFilePath(result.files.single.path!);
+        _player = await APAudioPlayerImpl.build(result.files.single.path!);
       }
       // _player.setAudio
       // _player.setAudioSource(AudioSource)
