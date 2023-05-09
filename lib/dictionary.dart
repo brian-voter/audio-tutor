@@ -68,7 +68,9 @@ class Dictionary {
       }
 
       if (!found) {
-        result.add(text[index]);
+        if (text[index].isNotEmpty) {
+          result.add(text[index]);
+        }
         index++;
       }
     }

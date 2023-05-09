@@ -1,44 +1,54 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 class TTSImpl {
-  static const twVoice = "cmn-tw-x-ctc-local";
+  // static const twVoice = "cmn-tw-x-ctc-local";
+  static const twVoice = "cmn-tw";
   static const Map<String, String> voiceMap = {
     "name": twVoice,
     "locale": "zh-TW"
   };
-  final FlutterTts _flutterTts = FlutterTts();
+  FlutterTts _flutterTts = FlutterTts();
   final List<TtsItem> _scheduledForSpeech = [];
   VoidCallback completionHandler;
 
   TTSImpl(this.completionHandler) {
-    _flutterTts.setCompletionHandler(_onSpeechComplete);
+    _initTts();
     getVoices();
   }
+
+  _initTts() {
+    _flutterTts.setCompletionHandler(_onSpeechComplete);
+  }
+
 
   getVoices() async {
     final voices = await _flutterTts.getVoices;
     print("voices: $voices");
   }
 
-  interruptAndScheduleBatch(List<TtsItem> items) {
-    try {
-      _flutterTts.stop();
-    } catch (e) {
-      //}
-    }
+  interruptAndScheduleBatch(List<TtsItem> items) async {
+    await _stopAudio();
     _scheduledForSpeech.clear();
     _scheduledForSpeech.addAll(items);
     _speakNext();
   }
 
-  stopAndClearScheduled() {
+  _stopAudio() async {
+    await _flutterTts.stop();
+
+    // note: seems to break on web after being stopped once.
+    // if (kIsWeb) {
+    //   _flutterTts = FlutterTts();
+    //   _initTts();
+    //   //TODO: is this necessary?
+    // }
+  }
+
+  stopAndClearScheduled() async {
     _scheduledForSpeech.clear();
-    try {
-      _flutterTts.stop();
-    } catch (e) {
-      //}
-    }
+    await _stopAudio();
   }
 
   _onSpeechComplete() {
