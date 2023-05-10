@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:audio_tutor/BufferAudioSource.dart';
+import 'package:audio_tutor/buffer_audio_source.dart';
 import 'package:audio_tutor/frequency.dart';
 import 'package:audio_tutor/text_to_speech.dart';
 import 'package:audio_tutor/transcript.dart';
@@ -11,23 +11,37 @@ import 'package:flutter/material.dart';
 import 'package:audio_tutor/dictionary.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_spinbox/flutter_spinbox.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:isar/isar.dart';
-import 'package:just_audio/just_audio.dart';
-import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:path_provider/path_provider.dart';
+import 'package:hive_flutter/adapters.dart';
 
 import 'at_audio_player.dart';
 import 'config.dart';
+import 'config_ui.dart';
+import 'nav_drawer.dart';
 
-const seekTimeMs = 5000;
+const seekTimeMs = 5000; //TODO: migrate to config setting
 const chineseLangTtsTagAndroid = "cmn_TW";
 const chineseLangTtsTagWeb = "zh-TW";
 const englishTtsTag = "en-US";
 
-void main() {
+late final Box<Config> configBox;
+
+//TODO: migrate dictionary etc out of homepage so it loads faster when we navigate to it
+
+class PageRoutes {
+  static const String home = MyHomePage.routeName;
+  static const String configEditor = ConfigEditor.routeName;
+}
+
+void main() async {
+  await _initConfig();
   runApp(const MyApp());
+}
+
+_initConfig() async {
+  await Hive.initFlutter();
+  Hive.registerAdapter(ConfigAdapter());
+  configBox = await Hive.openBox("configs");
 }
 
 class MyApp extends StatelessWidget {
@@ -41,12 +55,17 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.red,
       ),
       home: const MyHomePage(title: 'Ting - Chinese Audio Tutor'),
+      routes: {
+        PageRoutes.home: (context) => const MyHomePage(title: "Ting - Chinese Audio Tutor"),
+        PageRoutes.configEditor: (context) => const ConfigEditor(title: "Config Editor"),
+      }
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
+  static const String routeName = "/home";
 
   final String title;
 
@@ -55,7 +74,6 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late final Isar isar;
   late final ATAudioPlayer _player;
   late final MethodChannel platformMethodChannel;
   late final TTSImpl _ttsImpl;
@@ -80,11 +98,10 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void init() async {
-    await initConfig();
+    await loadConfig();
 
     final dictStr = await rootBundle.loadString("assets/cedict_ts.txt");
     _dict = Dictionary(dictStr);
-
 
     //TODO: fix frequency list to work with traditional chars as well
     final freqStr = await rootBundle.loadString("assets/freq_list.txt");
@@ -99,16 +116,12 @@ class _MyHomePageState extends State<MyHomePage> {
     updateVolumeCaptureStatus();
   }
 
-  Future<void> initConfig() async {
+  Future<void> loadConfig() async {
+    //TODO change this to be the user specified default
+    config = configBox.get("default", defaultValue: Config())!;
+    config.save();
 
-    //TODO: FIX THIS
-
-    if (!Config.doesConfigExist("default")) {
-      config = Config.newConfig("default");
-    } else {
-      await Config.deleteConfig("default");
-      config = Config.loadConfig("default");
-    }
+    print(config.configName);
   }
 
   void updateVolumeCaptureStatus() {
@@ -192,9 +205,9 @@ class _MyHomePageState extends State<MyHomePage> {
       TtsItem(
           entry.tradHanzi,
           // (kIsWeb ? chineseLangTtsTagWeb : chineseLangTtsTagAndroid)),
-          config.ttsChineseLocale.val, config.ttsChineseVoice.val),
+          config.ttsChineseLocale, config.ttsChineseVoice),
       TtsItem(entry.definition.replaceAll("/", ";"),
-          config.ttsEnglishLocale.val, config.ttsEnglishVoice.val)
+          config.ttsEnglishLocale, config.ttsEnglishVoice)
     ];
 
     _ttsImpl.interruptAndScheduleBatch(toSay);
@@ -234,7 +247,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _queryingAtWordIndex = queryingWord.wordIndex;
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency.val) {
+    while (freq < config.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! - 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -258,7 +271,7 @@ class _MyHomePageState extends State<MyHomePage> {
     var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency.val) {
+    while (freq < config.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! - 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -281,7 +294,7 @@ class _MyHomePageState extends State<MyHomePage> {
     var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency.val) {
+    while (freq < config.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! + 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -376,6 +389,7 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: Text(widget.title),
       ),
+      drawer: const ATNavigationDrawer(),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

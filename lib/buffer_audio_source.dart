@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:just_audio/just_audio.dart';
 
 class BufferAudioSource extends StreamAudioSource {
-  Uint8List _buffer;
+  final Uint8List _buffer;
 
   BufferAudioSource(this._buffer) : super();
 

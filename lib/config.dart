@@ -2,70 +2,39 @@
 //  id: BigInt.parse("-3644000870443854999").toInt(),
 // set config to final instead of const
 
-import 'package:get_storage/get_storage.dart';
-import 'package:uuid/uuid.dart';
+import 'package:hive/hive.dart';
 
-class Config {
+part 'config.g.dart';
+//run: flutter packages pub run build_runner build
 
-  static const uuid = Uuid();
-  static final _configMap = ReadWriteValue("configMap", <String, String>{});
 
-  late final String id;
-  late final StorageFactory _box;
+@HiveType(typeId: 0)
+class Config extends HiveObject {
 
-  Config._(this.id) {
-    _box = () => GetStorage(id);
-  }
+  @HiveField(0, defaultValue: "default")
+  String configName = "default";
 
-  static Config newConfig(String configName) {
-    final map = _configMap.val;
-    if (map.containsKey(configName)) {
-      throw ConfigNameTakenException();
-    }
+  @HiveField(1, defaultValue: "zh-TW")
+  String ttsChineseLocale = "zh-TW";
 
-    final id = uuid.v1();
-    final instance = Config._(id);
-    instance.configName.val = configName;
+  @HiveField(2, defaultValue: "cmn-tw-x-ctc-network")
+  String ttsChineseVoice = "cmn-tw-x-ctc-network";
 
-    map[configName] = id;
-    _configMap.val = map;
+  @HiveField(3, defaultValue: "en-US")
+  String ttsEnglishLocale = "en-US";
 
-    return instance;
-  }
+  //TODO: default
+  @HiveField(4, defaultValue: "")
+  String ttsEnglishVoice = "";
 
-  static Config loadConfig(String configName) {
-    if (!_configMap.val.containsKey(configName)) {
-      throw ConfigNameNotFoundException();
-    }
+  @HiveField(5, defaultValue: 0)
+  int ignoreWordsBelowFrequency = 0;
 
-    final id = _configMap.val[configName]!;
-
-    return Config._(id);
-  }
-
-  static bool doesConfigExist(String configName) {
-    return _configMap.val.containsKey(configName);
-  }
-
-  static Future<void> deleteConfig(String configName) async {
-    if (!doesConfigExist(configName)) {
-      throw ConfigNameNotFoundException();
-    }
-
-    final map = _configMap.val;
-
-    final id = map.remove(configName)!;
-    await GetStorage(id).erase();
-
-    await GetStorage().write(_configMap.key, map);
-  }
-
-  late final configName = ReadWriteValue("configName", "Default", _box);
-  late final ttsChineseLocale = ReadWriteValue("ttsChineseLocale", "zh-TW", _box);
-  late final ttsChineseVoice = ReadWriteValue("ttsChineseVoice", "cmn-tw-x-ctc-network", _box);
-  late final ttsEnglishLocale = ReadWriteValue("ttsEnglishLocale", "en-US", _box);
-  late final ttsEnglishVoice = ReadWriteValue("ttsEnglishVoice", "", _box);
-  late final ignoreWordsBelowFrequency = ReadWriteValue("ignoreWordsBelowFrequency", 0, _box);
+  // late final ttsChineseLocale = ReadWriteValue("ttsChineseLocale", "zh-TW", _box);
+  // late final ttsChineseVoice = ReadWriteValue("ttsChineseVoice", "cmn-tw-x-ctc-network", _box);
+  // late final ttsEnglishLocale = ReadWriteValue("ttsEnglishLocale", "en-US", _box);
+  // late final ttsEnglishVoice = ReadWriteValue("ttsEnglishVoice", "", _box);
+  // late final ignoreWordsBelowFrequency = ReadWriteValue("ignoreWordsBelowFrequency", 0, _box);
 
 }
 
