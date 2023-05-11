@@ -24,13 +24,14 @@ const chineseLangTtsTagAndroid = "cmn_TW";
 const chineseLangTtsTagWeb = "zh-TW";
 const englishTtsTag = "en-US";
 
-late final Box<Config> configBox;
+late final Box<Config> configsBox;
+late final Box mainBox;
 
 //TODO: migrate dictionary etc out of homepage so it loads faster when we navigate to it
 
 class PageRoutes {
-  static const String home = MyHomePage.routeName;
-  static const String configEditor = ConfigEditor.routeName;
+  static const String home = AudioPlayerPage.routeName;
+  static const String configEditor = ConfigEditorPage.routeName;
 }
 
 void main() async {
@@ -41,7 +42,8 @@ void main() async {
 _initConfig() async {
   await Hive.initFlutter();
   Hive.registerAdapter(ConfigAdapter());
-  configBox = await Hive.openBox("configs");
+  configsBox = await Hive.openBox("configs");
+  mainBox = await Hive.openBox("main");
 }
 
 class MyApp extends StatelessWidget {
@@ -54,26 +56,26 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.red,
       ),
-      home: const MyHomePage(title: 'Ting - Chinese Audio Tutor'),
+      home: const AudioPlayerPage(title: 'Ting - Chinese Audio Tutor'),
       routes: {
-        PageRoutes.home: (context) => const MyHomePage(title: "Ting - Chinese Audio Tutor"),
-        PageRoutes.configEditor: (context) => const ConfigEditor(title: "Config Editor"),
+        PageRoutes.home: (context) => const AudioPlayerPage(title: "Ting - Chinese Audio Tutor"),
+        PageRoutes.configEditor: (context) => const ConfigEditorPage(title: "Config Editor"),
       }
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class AudioPlayerPage extends StatefulWidget {
+  const AudioPlayerPage({super.key, required this.title});
   static const String routeName = "/home";
 
   final String title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<AudioPlayerPage> createState() => _AudioPlayerPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAliveClientMixin {
   late final ATAudioPlayer _player;
   late final MethodChannel platformMethodChannel;
   late final TTSImpl _ttsImpl;
@@ -93,7 +95,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _srtReady = false;
   double _queryPositionOffsetMs = -700.0;
 
-  _MyHomePageState() {
+  _AudioPlayerPageState() {
     init();
   }
 
@@ -118,7 +120,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> loadConfig() async {
     //TODO change this to be the user specified default
-    config = configBox.get("default", defaultValue: Config())!;
+    String activeConfigName = mainBox.get("activeConfig", defaultValue: "default");
+
+    config = configsBox.get(activeConfigName, defaultValue: Config())!;
     config.save();
 
     print(config.configName);
@@ -205,9 +209,9 @@ class _MyHomePageState extends State<MyHomePage> {
       TtsItem(
           entry.tradHanzi,
           // (kIsWeb ? chineseLangTtsTagWeb : chineseLangTtsTagAndroid)),
-          config.ttsChineseLocale, config.ttsChineseVoice),
+          config.ttsChineseLocale, Voice(config.ttsChineseVoice, config.ttsChineseLocale)),
       TtsItem(entry.definition.replaceAll("/", ";"),
-          config.ttsEnglishLocale, config.ttsEnglishVoice)
+          config.ttsEnglishLocale, Voice(config.ttsEnglishVoice, config.ttsEnglishLocale))
     ];
 
     _ttsImpl.interruptAndScheduleBatch(toSay);
@@ -544,6 +548,10 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
     );
   }
+
+  @override
+  // TODO: fix this?
+  bool get wantKeepAlive => true;
 }
 
 //43:22 被

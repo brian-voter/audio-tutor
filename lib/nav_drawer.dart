@@ -26,7 +26,8 @@ class ATNavigationDrawer extends StatelessWidget {
                 ],
               ),
               onTap: () {
-                Navigator.popAndPushNamed(context, PageRoutes.home);
+                Navigator.restorablePopAndPushNamed(context, PageRoutes.home);
+                // Navigator.popAndPushNamed(context, PageRoutes.home);
               },
             ),
             ListTile(
