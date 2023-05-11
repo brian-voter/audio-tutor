@@ -14,10 +14,10 @@ import 'package:flutter_spinbox/flutter_spinbox.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hive_flutter/adapters.dart';
 
+import 'MainPage.dart';
 import 'at_audio_player.dart';
 import 'config.dart';
 import 'config_ui.dart';
-import 'nav_drawer.dart';
 
 const seekTimeMs = 5000; //TODO: migrate to config setting
 const chineseLangTtsTagAndroid = "cmn_TW";
@@ -29,9 +29,10 @@ late final Box mainBox;
 
 //TODO: migrate dictionary etc out of homepage so it loads faster when we navigate to it
 
-class PageRoutes {
-  static const String home = AudioPlayerPage.routeName;
-  static const String configEditor = ConfigEditorPage.routeName;
+//TODO: actually use these:
+class PageIndices {
+  static const int audioPlayerhome = 0;
+  static const int configEditor = 1;
 }
 
 void main() async {
@@ -56,20 +57,14 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.red,
       ),
-      home: const AudioPlayerPage(title: 'Ting - Chinese Audio Tutor'),
-      routes: {
-        PageRoutes.home: (context) => const AudioPlayerPage(title: "Ting - Chinese Audio Tutor"),
-        PageRoutes.configEditor: (context) => const ConfigEditorPage(title: "Config Editor"),
-      }
+      home: const MainPage(),
     );
   }
 }
 
 class AudioPlayerPage extends StatefulWidget {
-  const AudioPlayerPage({super.key, required this.title});
+  const AudioPlayerPage({super.key});
   static const String routeName = "/home";
-
-  final String title;
 
   @override
   State<AudioPlayerPage> createState() => _AudioPlayerPageState();
@@ -389,12 +384,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
-      drawer: const ATNavigationDrawer(),
-      body: Center(
+    return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -545,7 +535,6 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
             ])
           ],
         ),
-      ),
     );
   }
 

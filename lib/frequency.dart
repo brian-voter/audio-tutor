@@ -15,7 +15,7 @@ class FrequencyList {
       }
 
       final split = lines[i].split("\t");
-      _freqMap[split[0]] = i;
+      _freqMap[split[0]] = i + 1;
     }
   }
 

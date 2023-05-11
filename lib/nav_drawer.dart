@@ -2,7 +2,9 @@ import 'package:audio_tutor/main.dart';
 import 'package:flutter/material.dart';
 
 class ATNavigationDrawer extends StatelessWidget {
-  const ATNavigationDrawer({super.key});
+  const ATNavigationDrawer(this.pageController, {super.key});
+
+  final PageController pageController;
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +28,8 @@ class ATNavigationDrawer extends StatelessWidget {
                 ],
               ),
               onTap: () {
-                Navigator.restorablePopAndPushNamed(context, PageRoutes.home);
-                // Navigator.popAndPushNamed(context, PageRoutes.home);
+                pageController.jumpToPage(0);
+                Navigator.pop(context);
               },
             ),
             ListTile(
@@ -41,7 +43,8 @@ class ATNavigationDrawer extends StatelessWidget {
                 ],
               ),
               onTap: () {
-                Navigator.popAndPushNamed(context, PageRoutes.configEditor);
+                pageController.jumpToPage(1);
+                Navigator.pop(context);
               },
             ),
           ],

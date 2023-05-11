@@ -31,12 +31,14 @@ class TTSImpl {
         chineseVoices.add(voice);
       }
     });
+    chineseVoices.sort((v1, v2) => v1.name.compareTo(v2.name));
 
     (await getVoicesForLanguage("en"))?.forEach((voice) {
       if (voice != null) {
         englishVoices.add(voice);
       }
     });
+    englishVoices.sort((v1, v2) => v1.name.compareTo(v2.name));
   }
 
   // static getVoices() async {

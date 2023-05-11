@@ -1,21 +1,20 @@
 import 'package:audio_tutor/config.dart';
 import 'package:audio_tutor/main.dart';
-import 'package:audio_tutor/nav_drawer.dart';
 import 'package:audio_tutor/text_to_speech.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_spinbox/flutter_spinbox.dart';
 
 class ConfigEditorPage extends StatefulWidget {
-  const ConfigEditorPage({super.key, required this.title});
+  const ConfigEditorPage({super.key});
 
   static const String routeName = "/configEditor";
-
-  final String title;
 
   @override
   State<ConfigEditorPage> createState() => _ConfigEditorPageState();
 }
 
-class _ConfigEditorPageState extends State<ConfigEditorPage> {
+class _ConfigEditorPageState extends State<ConfigEditorPage>
+    with AutomaticKeepAliveClientMixin {
   _ConfigEditorPageState();
 
   Config _editingConfig =
@@ -29,41 +28,39 @@ class _ConfigEditorPageState extends State<ConfigEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-        appBar: AppBar(
-          title: Text(widget.title),
-        ),
-        drawer: const ATNavigationDrawer(),
-        body: Center(
-            child: Column(
+    return Center(
+        child: Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(4.0),
-                  child: Text("Editing Config: "),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(4.0),
-                  child: DropdownButton<String>(
-                      value: "default", //TODO: REPLACE WITH ACTIVE CONFIG
-                      items: configsBox.keys
-                          .map((name) => DropdownMenuItem<String>(
-                                value: name,
-                                child: Text(name),
-                              ))
-                          .toList(),
-                      onChanged: (configName) =>
-                          {setEditingConfig(configName!)}),
-                ),
-              ],
+            const Padding(
+              padding: EdgeInsets.all(4.0),
+              child: Text("Editing Config: "),
             ),
-            const Divider(),
-            Expanded(child: ConfigEditor(_editingConfig))
+            Padding(
+              padding: const EdgeInsets.all(4.0),
+              child: DropdownButton<String>(
+                  value: "default", //TODO: REPLACE WITH ACTIVE CONFIG
+                  items: configsBox.keys
+                      .map((name) => DropdownMenuItem<String>(
+                            value: name,
+                            child: Text(name),
+                          ))
+                      .toList(),
+                  onChanged: (configName) => {setEditingConfig(configName!)}),
+            ),
           ],
-        )));
+        ),
+        const Divider(),
+        Expanded(child: ConfigEditor(_editingConfig))
+      ],
+    ));
   }
+
+  @override
+  // TODO: fix this?
+  bool get wantKeepAlive => true;
 }
 
 class ConfigEditor extends StatelessWidget {
@@ -74,13 +71,14 @@ class ConfigEditor extends StatelessWidget {
 
   _getVoiceSelectionDropdownButton(
       List<Voice> voices, void Function(Voice?)? onChanged) {
+
     return DropdownButton<Voice>(
       value: voices.first, //TODO: REPLACE WITH ACTIVE CONFIG
       items: voices
           .map((voice) => DropdownMenuItem<Voice>(
-                value: voice,
-                child: Text(voice.name),
-              ))
+        value: voice,
+        child: Text(voice.name),
+      ))
           .toList(),
       onChanged: onChanged,
     );
@@ -121,7 +119,7 @@ class ConfigEditor extends StatelessWidget {
           ),
           Row(
             children: [
-              const Text("Chinese TTS Locale: "),
+              const Text("Chinese TTS Voice: "),
               Expanded(
                   child: _getVoiceSelectionDropdownButton(TTSImpl.chineseVoices,
                       (voice) {
@@ -134,7 +132,7 @@ class ConfigEditor extends StatelessWidget {
           ),
           Row(
             children: [
-              const Text("English TTS Locale: "),
+              const Text("English TTS Voice: "),
               Expanded(
                   child: _getVoiceSelectionDropdownButton(TTSImpl.englishVoices,
                       (voice) {
@@ -143,6 +141,22 @@ class ConfigEditor extends StatelessWidget {
                   editingConfig.ttsEnglishVoice = voice.name;
                 }
               }))
+            ],
+          ),
+          Row(
+            children: [
+              const Text("Ignore words below frequency: "),
+              Expanded(
+                child: SpinBox(
+                  min: 1,
+                  max: 200000,
+                  value: editingConfig.ignoreWordsBelowFrequency.toDouble(),
+                  step: 100,
+                  onChanged: (value) => {
+                    editingConfig.ignoreWordsBelowFrequency = value.toInt()
+                  },
+                ),
+              )
             ],
           ),
         ]),
