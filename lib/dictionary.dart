@@ -46,6 +46,9 @@ class Dictionary {
   }
 
   List<String> parse(String text) {
+    //TODO: add more parsing for sequences of characters that can be parsed in multiple ways
+    //eg from laogao audio: [往日本]扔了兩個。。。 --> 往日 / 日本
+
     var longestLen = _longestEntry;
     var index = 0;
 

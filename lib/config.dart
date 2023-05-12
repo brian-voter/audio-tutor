@@ -7,6 +7,8 @@ import 'package:hive/hive.dart';
 part 'config.g.dart';
 //run: flutter packages pub run build_runner build
 
+const String defaultConfigName = "Default Config";
+const String activeConfigKey = "activeConfig";
 
 @HiveType(typeId: 0)
 class Config extends HiveObject {

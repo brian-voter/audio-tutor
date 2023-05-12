@@ -17,7 +17,6 @@ import 'package:hive_flutter/adapters.dart';
 import 'MainPage.dart';
 import 'at_audio_player.dart';
 import 'config.dart';
-import 'config_ui.dart';
 
 const seekTimeMs = 5000; //TODO: migrate to config setting
 const chineseLangTtsTagAndroid = "cmn_TW";
@@ -64,20 +63,23 @@ class MyApp extends StatelessWidget {
 
 class AudioPlayerPage extends StatefulWidget {
   const AudioPlayerPage({super.key});
+
   static const String routeName = "/home";
 
   @override
-  State<AudioPlayerPage> createState() => _AudioPlayerPageState();
+  State<AudioPlayerPage> createState() => AudioPlayerPageState();
 }
 
-class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAliveClientMixin {
+class AudioPlayerPageState extends State<AudioPlayerPage>
+    with AutomaticKeepAliveClientMixin {
   late final ATAudioPlayer _player;
   late final MethodChannel platformMethodChannel;
   late final TTSImpl _ttsImpl;
   late final Dictionary _dict;
   late final FrequencyList _freqList;
   late Transcript _srt;
-  late Config config;
+  Config? config;
+  List<Config>? _availableConfigs;
   bool _started = false;
   bool _playing = false;
   int? _queryingAtWordIndex;
@@ -90,9 +92,16 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
   bool _srtReady = false;
   double _queryPositionOffsetMs = -700.0;
 
-  _AudioPlayerPageState() {
+  AudioPlayerPageState() {
     init();
   }
+
+  // static void onConfigsUpdated() {
+  //   _instance.setState(() {
+  //     _instance.config = configsBox.get(activeConfigKey)!;
+  //     _instance._availableConfigs = configsBox.values.toList();
+  //   });
+  // }
 
   void init() async {
     await loadConfig();
@@ -114,13 +123,37 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
   }
 
   Future<void> loadConfig() async {
-    //TODO change this to be the user specified default
-    String activeConfigName = mainBox.get("activeConfig", defaultValue: "default");
+    _availableConfigs = configsBox.values.toList();
 
-    config = configsBox.get(activeConfigName, defaultValue: Config())!;
-    config.save();
+    configsBox.listenable().addListener(() {
+      setState(() {
+        _availableConfigs = configsBox.values.toList();
+      });
+    });
 
-    print(config.configName);
+    mainBox.listenable(keys: [activeConfigKey]).addListener(() {
+      setState(() {
+        _availableConfigs = configsBox.values.toList();
+        config = configsBox.get(mainBox.get(activeConfigKey));
+      });
+    });
+
+    var activeConfigName = mainBox.get(activeConfigKey);
+
+    if (activeConfigName != null) {
+      var activeConfig = configsBox.get(activeConfigName);
+      if (activeConfig != null) {
+        config = activeConfig;
+        return;
+      }
+    }
+
+    var defaultConfig = configsBox.get(defaultConfigName);
+    defaultConfig ??= Config()..configName = defaultConfigName;
+    configsBox.put(defaultConfigName, defaultConfig);
+
+    config = defaultConfig;
+    mainBox.put(activeConfigKey, defaultConfigName);
   }
 
   void updateVolumeCaptureStatus() {
@@ -204,9 +237,10 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
       TtsItem(
           entry.tradHanzi,
           // (kIsWeb ? chineseLangTtsTagWeb : chineseLangTtsTagAndroid)),
-          config.ttsChineseLocale, Voice(config.ttsChineseVoice, config.ttsChineseLocale)),
-      TtsItem(entry.definition.replaceAll("/", ";"),
-          config.ttsEnglishLocale, Voice(config.ttsEnglishVoice, config.ttsEnglishLocale))
+          config!.ttsChineseLocale,
+          Voice(config!.ttsChineseVoice, config!.ttsChineseLocale)),
+      TtsItem(entry.definition.replaceAll("/", ";"), config!.ttsEnglishLocale,
+          Voice(config!.ttsEnglishVoice, config!.ttsEnglishLocale))
     ];
 
     _ttsImpl.interruptAndScheduleBatch(toSay);
@@ -246,7 +280,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
     _queryingAtWordIndex = queryingWord.wordIndex;
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency) {
+    while (freq < config!.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! - 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -270,7 +304,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
     var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency) {
+    while (freq < config!.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! - 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -293,7 +327,7 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
     var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config.ignoreWordsBelowFrequency) {
+    while (freq < config!.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! + 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -382,159 +416,188 @@ class _AudioPlayerPageState extends State<AudioPlayerPage> with AutomaticKeepAli
     }
   }
 
+  void _setActiveConfig(String configName) async {
+    setState(() {
+      config = configsBox.get(configName)!;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Column(
-              // IMPORT & SETTINGS
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: [
-                    IconButton(
-                        onPressed: _onSelectAudioFile,
-                        icon: const Icon(Icons.file_open)),
-                    const Text("Select Audio File"),
-                  ],
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Column(
+            // IMPORT & SETTINGS
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: <Widget>[
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                TextButton(
+                    style: ButtonStyle(
+                        foregroundColor: MaterialStateColor.resolveWith(
+                            (states) => Colors.black87)),
+                    onPressed: _onSelectAudioFile,
+                    child: Row(children: const [
+                      Icon(Icons.file_open),
+                      Text("Select Audio File"),
+                    ])),
+                TextButton(
+                    style: ButtonStyle(
+                        foregroundColor: MaterialStateColor.resolveWith(
+                            (states) => Colors.black87)),
+                    onPressed: _onSelectSRTFile,
+                    child: Row(children: const [
+                      Icon(Icons.file_open),
+                      Text("Select SRT File"),
+                    ])),
+              ]),
+              Row(children: [
+                const Padding(
+                  padding: EdgeInsets.all(7.0),
+                  child: Text("Active Config:"),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                        onPressed: _onSelectSRTFile,
-                        icon: const Icon(Icons.file_open)),
-                    const Text("Select SRT File"),
-                  ],
-                ),
-                ((!kIsWeb && Platform.isAndroid)
-                    ? Row(
-                        //TODO: refactor this mess
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Switch(
-                                  value: _isCaptureVolumeButtons,
-                                  onChanged: _onCaptureVolumeButtonsChanged),
-                              const Text("Capture vol. buttons"),
-                            ],
-                          ),
-                        ],
-                      )
-                    : Row()),
                 Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Text("Offset (ms):"),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(5, 0, 0, 0),
-                        child: Container(
-                          constraints: const BoxConstraints.expand(
-                              width: 200, height: 40),
-                          child: SpinBox(
-                            min: -60000,
-                            max: 60000,
-                            value: _queryPositionOffsetMs,
-                            step: 100,
-                            onChanged: (value) => {
-                              setState(() {
-                                _queryPositionOffsetMs = value;
-                              })
-                            },
-                          ),
+                  padding: const EdgeInsets.all(4.0),
+                  child: ((config == null || _availableConfigs == null)
+                      ? null
+                      : DropdownButton<String>(
+                          value: config!.configName,
+                          items: _availableConfigs!
+                              .map((config) => DropdownMenuItem<String>(
+                                    value: config.configName,
+                                    child: Text(config.configName),
+                                  ))
+                              .toList(),
+                          onChanged: (configName) =>
+                              _setActiveConfig(configName!))),
+                ),
+              ]),
+              ((!kIsWeb && Platform.isAndroid)
+                  ? Row(
+                      //TODO: refactor this mess
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Switch(
+                                value: _isCaptureVolumeButtons,
+                                onChanged: _onCaptureVolumeButtonsChanged),
+                            const Text("Capture vol. buttons"),
+                          ],
                         ),
-                      )
-                    ],
-                  ),
-                )
-              ],
-            ),
-            Expanded(
-              child: Padding(
+                      ],
+                    )
+                  : Row()),
+              Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      _currentlyDisplayedSubLineText,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 20),
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            _currentlyDisplayedDefText,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 20),
-                          ),
+                    const Text("Offset (ms):"),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(5, 0, 0, 0),
+                      child: Container(
+                        constraints:
+                            const BoxConstraints.expand(width: 200, height: 40),
+                        child: SpinBox(
+                          min: -60000,
+                          max: 60000,
+                          value: _queryPositionOffsetMs,
+                          step: 100,
+                          onChanged: (value) => {
+                            setState(() {
+                              _queryPositionOffsetMs = value;
+                            })
+                          },
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+              )
+            ],
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _currentlyDisplayedSubLineText,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 20),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          _currentlyDisplayedDefText,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 20),
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                      onPressed:
-                          (_started && _srtReady) ? _queryMoveBack : null,
-                      child: const Icon(Icons.arrow_back)),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                        onPressed:
-                            (_started && _srtReady) ? _consultDict : null,
-                        child: const Icon(Icons.search)),
-                  ),
-                  ElevatedButton(
-                      onPressed:
-                          (_started && _srtReady) ? _queryMoveFoward : null,
-                      child: const Icon(Icons.arrow_forward)),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(30, 10, 30, 0),
-                child: ProgressBar(
-                  progress: _audioPosition ?? const Duration(seconds: 0),
-                  buffered: const Duration(seconds: 0),
-                  total: _totalDuration ?? const Duration(seconds: 0),
-                  onSeek: _onUserSeek,
+          ),
+          Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                    onPressed: (_started && _srtReady) ? _queryMoveBack : null,
+                    child: const Icon(Icons.arrow_back)),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                      onPressed: (_started && _srtReady) ? _consultDict : null,
+                      child: const Icon(Icons.search)),
                 ),
+                ElevatedButton(
+                    onPressed:
+                        (_started && _srtReady) ? _queryMoveFoward : null,
+                    child: const Icon(Icons.arrow_forward)),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(30, 10, 30, 0),
+              child: ProgressBar(
+                progress: _audioPosition ?? const Duration(seconds: 0),
+                buffered: const Duration(seconds: 0),
+                total: _totalDuration ?? const Duration(seconds: 0),
+                onSeek: _onUserSeek,
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                      onPressed: _started ? _onBackButtonPress : null,
-                      child: const Icon(Icons.keyboard_double_arrow_left)),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: ElevatedButton(
-                        onPressed: _audioReady ? _playPauseButtonPress : null,
-                        child: Icon(_playing ? Icons.pause : Icons.play_arrow)),
-                  ),
-                  ElevatedButton(
-                      onPressed: _started ? _onForwardButtonPress : null,
-                      child: const Icon(Icons.keyboard_double_arrow_right)),
-                ],
-              ),
-              //     child: Text(
-              //   playing ? "Pause" : "Play"
-              // )),
-            ])
-          ],
-        ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                    onPressed: _started ? _onBackButtonPress : null,
+                    child: const Icon(Icons.keyboard_double_arrow_left)),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                      onPressed: _audioReady ? _playPauseButtonPress : null,
+                      child: Icon(_playing ? Icons.pause : Icons.play_arrow)),
+                ),
+                ElevatedButton(
+                    onPressed: _started ? _onForwardButtonPress : null,
+                    child: const Icon(Icons.keyboard_double_arrow_right)),
+              ],
+            ),
+            //     child: Text(
+            //   playing ? "Pause" : "Play"
+            // )),
+          ])
+        ],
+      ),
     );
   }
 
