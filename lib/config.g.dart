@@ -22,14 +22,17 @@ class ConfigAdapter extends TypeAdapter<Config> {
       ..ttsChineseVoice =
           fields[2] == null ? 'cmn-tw-x-ctc-network' : fields[2] as String
       ..ttsEnglishLocale = fields[3] == null ? 'en-US' : fields[3] as String
-      ..ttsEnglishVoice = fields[4] == null ? '' : fields[4] as String
-      ..ignoreWordsBelowFrequency = fields[5] == null ? 0 : fields[5] as int;
+      ..ttsEnglishVoice =
+          fields[4] == null ? 'en-US-language' : fields[4] as String
+      ..ignoreWordsBelowFrequency = fields[5] == null ? 0 : fields[5] as int
+      ..translateLinesRelativeSelector =
+          fields[6] == null ? '-1, 0' : fields[6] as String;
   }
 
   @override
   void write(BinaryWriter writer, Config obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.configName)
       ..writeByte(1)
@@ -41,7 +44,9 @@ class ConfigAdapter extends TypeAdapter<Config> {
       ..writeByte(4)
       ..write(obj.ttsEnglishVoice)
       ..writeByte(5)
-      ..write(obj.ignoreWordsBelowFrequency);
+      ..write(obj.ignoreWordsBelowFrequency)
+      ..writeByte(6)
+      ..write(obj.translateLinesRelativeSelector);
   }
 
   @override

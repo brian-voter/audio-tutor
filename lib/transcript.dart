@@ -35,6 +35,24 @@ class Transcript {
     throw Exception("Specified time is out of range");
   }
 
+  SubtitleLine getLineAtTime(double timeSeconds) {
+    for (var i = 0; i < _subLines.length; i++) {
+      final line = _subLines[i];
+
+      if (line.includesTime(timeSeconds)) {
+        return line;
+      }
+
+      if (i > 0 &&
+          timeSeconds > _subLines[i - 1].endSeconds &&
+          timeSeconds < line.startSeconds) {
+        return _words[i - 1]; //TODO: fix this method
+      }
+    }
+
+    throw Exception("Specified time is out of range");
+  }
+
   SubtitleWord getWordAtIndex(int index) {
     return _words[index];
   }

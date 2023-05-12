@@ -171,8 +171,13 @@ class ConfigEditor extends StatefulWidget {
 
 class _ConfigEditorState extends State<ConfigEditor> {
   final _formKey = GlobalKey<FormState>();
+
+  //FIXME: NOT UPDATING NAME OR LINES SELECTOR WHEN EDITING CONFIG IS CHANGED
   late final _cfgNameController =
       TextEditingController(text: widget._editingConfig.configName);
+
+  late final _cfgTrnsLinesSelectorController = TextEditingController(
+      text: widget._editingConfig.translateLinesRelativeSelector);
 
   _updateConfigName(String newName) async {
     if (widget._editingConfig.configName == defaultConfigName ||
@@ -220,6 +225,40 @@ class _ConfigEditorState extends State<ConfigEditor> {
               ))
           .toList(),
       onChanged: onChanged,
+    );
+  }
+
+  _showTrnsLinesSelectorHelp() {
+    final alert = AlertDialog(
+      title: const Text("Info"),
+      content: Column( mainAxisSize: MainAxisSize.min,
+        children: const [
+          Text(
+              "This field allows you to select which lines will be translated, "
+              "relative to the current transcript line."),
+          Text(
+              "\n'0,0' will just translate the current line. "
+              "'-1, 0' will translate the last line and the current line, and "
+              "'-1, 1' will translate the last line, current line, and the next line."),
+          Text(
+              "\nThe first number must be smaller than the second, "
+              "and both must be between -5 and 5."),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text("Close")),
+      ],
+    );
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return alert;
+      },
     );
   }
 
@@ -325,6 +364,57 @@ class _ConfigEditorState extends State<ConfigEditor> {
                   },
                 ),
               )
+            ],
+          ),
+          Row(
+            children: [
+              const Text("Translate Lines (Rel): "),
+              Expanded(
+                child: TextFormField(
+                  // initialValue:
+                  //     widget._editingConfig.translateLinesRelativeSelector,
+                  controller: _cfgTrnsLinesSelectorController,
+                  enableSuggestions: false,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Tap the info icon for help.';
+                    }
+
+                    final strs = value.trim().split(",");
+
+                    final anyInvalid = (strs.any((s) {
+                      final asInt = int.tryParse(s.trim());
+                      if (asInt == null) {
+                        return true;
+                      }
+
+                      return asInt.abs() > 5;
+                    }));
+
+                    if (strs.length != 2 || anyInvalid) {
+                      return "Tap the info icon for help.";
+                    }
+
+                    final nums = strs.map((s) => int.parse(s)).toList();
+                    if (nums.first > nums.last) {
+                      return "Tap the info icon for help.";
+                    }
+                    return null;
+                  },
+                  onEditingComplete: () {
+                    if (_formKey.currentState?.validate() == true) {
+                      primaryFocus?.nextFocus();
+                      setState(() {
+                        widget._editingConfig.translateLinesRelativeSelector =
+                            _cfgTrnsLinesSelectorController.value.text;
+                      });
+                    }
+                  },
+                ),
+              ),
+              IconButton(
+                  onPressed: _showTrnsLinesSelectorHelp,
+                  icon: const Icon(Icons.info_outline)),
             ],
           ),
         ]),

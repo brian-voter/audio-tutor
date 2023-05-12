@@ -26,11 +26,14 @@ class Config extends HiveObject {
   String ttsEnglishLocale = "en-US";
 
   //TODO: default
-  @HiveField(4, defaultValue: "")
-  String ttsEnglishVoice = "";
+  @HiveField(4, defaultValue: "en-US-language")
+  String ttsEnglishVoice = "en-US-language";
 
   @HiveField(5, defaultValue: 0)
   int ignoreWordsBelowFrequency = 0;
+
+  @HiveField(6, defaultValue: "-1, 0")
+  String translateLinesRelativeSelector = "-1, 0";
 
   // late final ttsChineseLocale = ReadWriteValue("ttsChineseLocale", "zh-TW", _box);
   // late final ttsChineseVoice = ReadWriteValue("ttsChineseVoice", "cmn-tw-x-ctc-network", _box);

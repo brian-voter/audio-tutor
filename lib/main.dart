@@ -5,6 +5,7 @@ import 'package:audio_tutor/buffer_audio_source.dart';
 import 'package:audio_tutor/frequency.dart';
 import 'package:audio_tutor/text_to_speech.dart';
 import 'package:audio_tutor/transcript.dart';
+import 'package:audio_tutor/translator.dart';
 import 'package:audio_video_progress_bar/audio_video_progress_bar.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +37,7 @@ class PageIndices {
 
 void main() async {
   await _initConfig();
+  Translator.init();
   runApp(const MyApp());
 }
 
@@ -78,7 +80,7 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
   late final Dictionary _dict;
   late final FrequencyList _freqList;
   late Transcript _srt;
-  Config? config;
+  Config? _config;
   List<Config>? _availableConfigs;
   bool _started = false;
   bool _playing = false;
@@ -92,16 +94,19 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
   bool _srtReady = false;
   double _queryPositionOffsetMs = -700.0;
 
-  AudioPlayerPageState() {
-    init();
-  }
-
   // static void onConfigsUpdated() {
   //   _instance.setState(() {
   //     _instance.config = configsBox.get(activeConfigKey)!;
   //     _instance._availableConfigs = configsBox.values.toList();
   //   });
   // }
+
+  @override
+  void initState() {
+    super.initState();
+
+    init();
+  }
 
   void init() async {
     await loadConfig();
@@ -134,7 +139,7 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
     mainBox.listenable(keys: [activeConfigKey]).addListener(() {
       setState(() {
         _availableConfigs = configsBox.values.toList();
-        config = configsBox.get(mainBox.get(activeConfigKey));
+        _config = configsBox.get(mainBox.get(activeConfigKey));
       });
     });
 
@@ -143,7 +148,7 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
     if (activeConfigName != null) {
       var activeConfig = configsBox.get(activeConfigName);
       if (activeConfig != null) {
-        config = activeConfig;
+        _config = activeConfig;
         return;
       }
     }
@@ -152,7 +157,7 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
     defaultConfig ??= Config()..configName = defaultConfigName;
     configsBox.put(defaultConfigName, defaultConfig);
 
-    config = defaultConfig;
+    _config = defaultConfig;
     mainBox.put(activeConfigKey, defaultConfigName);
   }
 
@@ -237,10 +242,10 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
       TtsItem(
           entry.tradHanzi,
           // (kIsWeb ? chineseLangTtsTagWeb : chineseLangTtsTagAndroid)),
-          config!.ttsChineseLocale,
-          Voice(config!.ttsChineseVoice, config!.ttsChineseLocale)),
-      TtsItem(entry.definition.replaceAll("/", ";"), config!.ttsEnglishLocale,
-          Voice(config!.ttsEnglishVoice, config!.ttsEnglishLocale))
+          _config!.ttsChineseLocale,
+          Voice(_config!.ttsChineseVoice, _config!.ttsChineseLocale)),
+      TtsItem(entry.definition.replaceAll("/", ";"), _config!.ttsEnglishLocale,
+          Voice(_config!.ttsEnglishVoice, _config!.ttsEnglishLocale))
     ];
 
     _ttsImpl.interruptAndScheduleBatch(toSay);
@@ -280,13 +285,64 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
     _queryingAtWordIndex = queryingWord.wordIndex;
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config!.ignoreWordsBelowFrequency) {
+    while (freq < _config!.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! - 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
     }
 
     _renderQuery(queryingWord);
+  }
+
+  void _getTranslation() async {
+    if (!_started) {
+      return;
+    }
+
+    _pause();
+
+    final positionSeconds =
+        (await _player.getPosition() ?? const Duration()).inSeconds.toDouble();
+
+    final line =
+        _srt.getLineAtTime(positionSeconds + (_queryPositionOffsetMs / 1000));
+
+    String selectedLinesString = _getNearbyLinesForTranslation(line.lineIndex);
+
+    setState(() {
+      _currentlyDisplayedSubLineText = selectedLinesString;
+    });
+
+    final translation = await Translator.translateText(selectedLinesString);
+
+    setState(() {
+      _currentlyDisplayedDefText = translation;
+    });
+
+    _ttsImpl.interruptAndScheduleBatch([
+      TtsItem(translation, _config!.ttsEnglishLocale,
+          Voice(_config!.ttsEnglishVoice, _config!.ttsEnglishLocale))
+    ]);
+  }
+
+  String _getNearbyLinesForTranslation(int currentLineIndex) {
+    final selectedLinesOffsetRange = _config!.translateLinesRelativeSelector
+        .split(",")
+        .map((s) => int.parse(s.trim()))
+        .toList();
+
+    final start = selectedLinesOffsetRange[0];
+    final end = selectedLinesOffsetRange[1];
+
+    final List<int> selectLinesIndices = [];
+    for (var i = start; i <= end; i++) {
+      selectLinesIndices.add(i);
+    }
+
+    final selectedLinesString = selectLinesIndices
+        .map((i) => _srt.getLineAtIndex(currentLineIndex + i).text)
+        .join(" ");
+    return selectedLinesString;
   }
 
   void _queryMoveBack() {
@@ -304,7 +360,7 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
     var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config!.ignoreWordsBelowFrequency) {
+    while (freq < _config!.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! - 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -327,7 +383,7 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
     var queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
     var freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
 
-    while (freq < config!.ignoreWordsBelowFrequency) {
+    while (freq < _config!.ignoreWordsBelowFrequency) {
       _queryingAtWordIndex = _queryingAtWordIndex! + 1;
       queryingWord = _srt.getWordAtIndex(_queryingAtWordIndex!);
       freq = _freqList.getFreqOrDefault(queryingWord.text, 100000);
@@ -418,7 +474,7 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
 
   void _setActiveConfig(String configName) async {
     setState(() {
-      config = configsBox.get(configName)!;
+      _config = configsBox.get(configName)!;
     });
   }
 
@@ -460,10 +516,10 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
                 ),
                 Padding(
                   padding: const EdgeInsets.all(4.0),
-                  child: ((config == null || _availableConfigs == null)
+                  child: ((_config == null || _availableConfigs == null)
                       ? null
                       : DropdownButton<String>(
-                          value: config!.configName,
+                          value: _config!.configName,
                           items: _availableConfigs!
                               .map((config) => DropdownMenuItem<String>(
                                     value: config.configName,
@@ -549,11 +605,18 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
           ),
           Column(mainAxisAlignment: MainAxisAlignment.end, children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 ElevatedButton(
                     onPressed: (_started && _srtReady) ? _queryMoveBack : null,
                     child: const Icon(Icons.arrow_back)),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: ElevatedButton(
+                      onPressed:
+                          (_started && _srtReady) ? _getTranslation : null,
+                      child: const Icon(Icons.language_outlined)),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: ElevatedButton(
@@ -576,7 +639,7 @@ class AudioPlayerPageState extends State<AudioPlayerPage>
               ),
             ),
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 ElevatedButton(
                     onPressed: _started ? _onBackButtonPress : null,
