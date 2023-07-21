@@ -1,16 +1,15 @@
-# audio_tutor
+# Ting: Chinese Audio Tutor
 
-A new Flutter project.
+This app allows users to study Chinese while on the go by listening to their favorite podcasts and audio content. 
 
-## Getting Started
+Learners can use the fully automatic & pure audio dictionary lookup, translation, and text-to-speech features to learn new vocabulary words without even glancing at their device. 
 
-This project is a starting point for a Flutter application.
+![Screenshot_2023-07-21-18-48-22-34_1802072d5c4c5d127bb741094db6bece](https://github.com/brian-voter/audio-tutor/assets/5050862/1dcd9dc8-be09-4257-b285-0c60fb4d37f4)
 
-A few resources to get you started if this is your first Flutter project:
+![Screenshot_2023-07-21-18-48-29-72_1802072d5c4c5d127bb741094db6bece](https://github.com/brian-voter/audio-tutor/assets/5050862/c1290100-2272-470b-952b-6f809e85df6a)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Implementation
+
+Ting targets Android and Web platforms, and was built in [Flutter](https://flutter.dev) using Dart
+
